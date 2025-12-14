@@ -1,64 +1,48 @@
-#!/usr/bin/env python3
+import zmq
+import os
+from datetime import datetime
 
-import socket
-import sys
+PORT = "5555"
+LOG_FILE = "server_log.txt"
 
-HOST = '127.0.0.1'
-PORT = 5555
-BACKLOG = 1
-BUFFER_SIZE = 1024
+def print_saved_data():
+    if os.path.exists(LOG_FILE):
+        print("\n--- Сохранённые данные ---")
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            print(f.read())
+        print("------------------------------\n")
+    else:
+        print("Файл с данными пока пуст.")
 
-def start_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+def run_server():
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+
+    socket.bind(f"tcp://*:{PORT}")
+
+    print(f"Сервер запущен. Ожидание данных на порту {PORT}...")
+    packet_count = 0
 
     try:
-        server_socket.bind((HOST, PORT))
-        print(f"[SERVER] Binding to {HOST}:{PORT}")
-
-        server_socket.listen(BACKLOG)
-        print(f"[SERVER] Listening on {HOST}:{PORT}...")
-        print("[SERVER] Waiting for client connection...\n")
-
         while True:
-            client_socket, client_address = server_socket.accept()
-            print(f"[SERVER] Client connected from {client_address}")
+            message = socket.recv_string()
+            packet_count += 1
 
-            try:
-                received_data = client_socket.recv(BUFFER_SIZE)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = f"[{timestamp}] Packet #{packet_count}: {message}\n"
 
-                if received_data:
-                    message = received_data.decode('utf-8')
-                    print(f"[SERVER] Received: {message}")
+            with open(LOG_FILE, "a", encoding='utf-8') as f:
+                f.write(log_entry)
 
-                    response = "Hello from Server!"
-
-                    client_socket.sendall(response.encode('utf-8'))
-                    print(f"[SERVER] Sent: {response}")
-
-                else:
-                    print("[SERVER] No data received")
-
-            except Exception as e:
-                print(f"[SERVER] Error processing client: {e}")
-
-            finally:
-                client_socket.close()
-                print(f"[SERVER] Client {client_address} disconnected\n")
+            print(f"Получено: {message} | Всего пакетов: {packet_count}")
+            socket.send_string("Hello from Server!")
 
     except KeyboardInterrupt:
-        print("\n[SERVER] Interrupt received, shutting down...")
-
-    except OSError as e:
-        print(f"[SERVER] Socket error: {e}")
-        print(f"[SERVER] Make sure port {PORT} is not already in use")
-
-    except Exception as e:
-        print(f"[SERVER] Unexpected error: {e}")
-
+        print("\nСервер остановлен.")
+        print_saved_data()
     finally:
-        server_socket.close()
-        print("[SERVER] Server stopped\n")
+        socket.close()
+        context.term()
 
 if __name__ == "__main__":
-    start_server()
+    run_server()
