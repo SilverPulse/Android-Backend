@@ -1,0 +1,4 @@
+gps_track_log.json 
+.venv/ 
+.idea/ 
+build/ 

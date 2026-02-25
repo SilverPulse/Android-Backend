@@ -1,7 +1,0 @@
-[2025-12-15 09:53:57] Packet #1: Hello from Android!
-[2025-12-15 09:56:05] Packet #2: Hello from Android!
-[2025-12-15 09:56:06] Packet #3: Hello from Android!
-[2025-12-15 09:56:07] Packet #4: Hello from Android!
-[2025-12-15 09:56:10] Packet #5: Hello from Android!
-[2025-12-15 10:01:52] Packet #1: Hello from Android!
-[2025-12-15 10:19:08] Packet #2: Hello from Android!
