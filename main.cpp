@@ -52,37 +52,38 @@ void network_thread_func() {
 
             try {
                 auto j = json::parse(msg_str);
-                if (j.contains("type") && j["type"] == "location_update") {
-                    float lat = j["data"]["lat"];
-                    float lon = j["data"]["lon"];
-                    float alt = j["data"].value("alt", 0.0f);
-                    long long time = j["data"].value("timestamp", 0LL);
 
-                    std::lock_guard<std::mutex> lock(g_points_mutex);
-                    g_points.push_back({lat, lon, alt, time});
-                    g_status = "Receiving data...";
+                if (j.contains("type")) {
+                    if (j["type"] == "location_update") {
+                        float lat = j["data"]["lat"];
+                        float lon = j["data"]["lon"];
+                        float alt = j["data"].value("alt", 0.0f);
+                        long long time = j["data"].value("timestamp", 0LL);
+
+                        std::lock_guard<std::mutex> lock(g_points_mutex);
+                        g_points.push_back({lat, lon, alt, time});
+                        g_status = "Receiving basic location...";
+                    }
+                    else if (j["type"] == "telemetry_update") {
+                        float lat = j["location"]["lat"];
+                        float lon = j["location"]["lon"];
+                        float alt = j["location"].value("alt", 0.0f);
+                        long long time = j["location"].value("time", 0LL);
+
+                        std::lock_guard<std::mutex> lock(g_points_mutex);
+                        g_points.push_back({lat, lon, alt, time});
+                        g_status = "Receiving full telemetry...";
+                    }
                 }
-            } catch (...) {}
+            } catch (...) {
+            }
             socket.send(zmq::str_buffer("OK"), zmq::send_flags::none);
         }
     }
     if (log_file.is_open()) log_file.close();
 }
 
-int main(int, char**) {
-    if (!glfwInit()) return 1;
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Cyber GPS Monitor", NULL, NULL);
-    if (!window) return 1;
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    SetupNeonTheme();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
-
-    std::thread net_thread(network_thread_func);
+void run_gui_loop(GLFWwindow* window) {
     float scale = 150000.0f;
 
     while (!glfwWindowShouldClose(window)) {
@@ -172,9 +173,34 @@ int main(int, char**) {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
+}
+
+
+int main(int, char**) {
+    if (!glfwInit()) return 1;
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Cyber GPS Monitor", NULL, NULL);
+    if (!window) return 1;
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    SetupNeonTheme();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 130");
+
+    std::thread net_thread(network_thread_func);
+
+    run_gui_loop(window);
+
     g_running = false;
     if (net_thread.joinable()) net_thread.join();
-    ImGui_ImplOpenGL3_Shutdown(); ImGui_ImplGlfw_Shutdown(); ImGui::DestroyContext();
-    glfwDestroyWindow(window); glfwTerminate();
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
     return 0;
 }
