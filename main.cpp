@@ -3,6 +3,7 @@
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <stdio.h>
+#include "implot.h"
 #include <zmq.hpp>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -22,6 +23,10 @@ std::vector<GPSPoint> g_points;
 std::mutex g_points_mutex;
 bool g_running = true;
 std::string g_status = "Waiting for connection...";
+
+std::vector<double> g_time_data;
+std::vector<double> g_rsrp_data;
+long long g_start_time = 0;
 
 void SetupNeonTheme() {
     ImGuiStyle& style = ImGui::GetStyle();
@@ -70,8 +75,25 @@ void network_thread_func() {
                         float alt = j["location"].value("alt", 0.0f);
                         long long time = j["location"].value("time", 0LL);
 
+                        double rsrp = 0.0;
+                        bool has_signal = false;
+                        if (j.contains("telephony") && j["telephony"].contains("lte")) {
+                            rsrp = j["telephony"]["lte"].value("rsrp", 0.0);
+                            has_signal = true;
+                        }
+
                         std::lock_guard<std::mutex> lock(g_points_mutex);
                         g_points.push_back({lat, lon, alt, time});
+
+                        if (has_signal) {
+                            if (g_time_data.empty()) {
+                                g_start_time = time;
+                            }
+                            double time_sec = (time - g_start_time) / 1000.0;
+                            g_time_data.push_back(time_sec);
+                            g_rsrp_data.push_back(rsrp);
+                        }
+
                         g_status = "Receiving full telemetry...";
                     }
                 }
@@ -131,6 +153,8 @@ void run_gui_loop(GLFWwindow* window) {
         if (ImGui::Button("CLEAR ALL", ImVec2(-1, 40))) {
             std::lock_guard<std::mutex> lock(g_points_mutex);
             g_points.clear();
+            g_time_data.clear();
+            g_rsrp_data.clear();
         }
         ImGui::End();
 
@@ -166,6 +190,28 @@ void run_gui_loop(GLFWwindow* window) {
         }
         ImGui::End();
 
+        ImGui::SetNextWindowPos(ImVec2(10, 370), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(300, 340), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Signal Strength (LTE RSRP)");
+
+        ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+        ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(0.0f, 0.02f, 0.0f, 1.0f));
+
+        ImPlot::PushColormap("Hacker");
+
+        if (ImPlot::BeginPlot("Cell Signal", ImVec2(-1, -1))) {
+            ImPlot::SetupAxes("Time (seconds)", "RSRP (dBm)");
+
+            std::lock_guard<std::mutex> lock(g_points_mutex);
+            if (!g_time_data.empty() && !g_rsrp_data.empty()) {
+                ImPlot::PlotLine("LTE RSRP", g_time_data.data(), g_rsrp_data.data(), (int)g_time_data.size());
+            }
+            ImPlot::EndPlot();
+        }
+        ImPlot::PopColormap();
+        ImPlot::PopStyleColor(2);
+        ImGui::End();
+
         ImGui::Render();
         int dw, dh; glfwGetFramebufferSize(window, &dw, &dh);
         glViewport(0, 0, dw, dh);
@@ -185,6 +231,14 @@ int main(int, char**) {
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
+
+    ImVec4 hacker_colors[2] = {
+            ImVec4(0.0f, 1.0f, 0.2f, 1.0f),
+            ImVec4(0.0f, 1.0f, 0.2f, 1.0f)
+    };
+    ImPlot::AddColormap("Hacker", hacker_colors, 2);
+
     SetupNeonTheme();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
@@ -198,6 +252,7 @@ int main(int, char**) {
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
