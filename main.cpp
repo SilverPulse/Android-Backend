@@ -26,6 +26,9 @@ std::string g_status = "Waiting for connection...";
 
 std::vector<double> g_time_data;
 std::vector<double> g_rsrp_data;
+
+std::vector<double> g_log_lons;
+std::vector<double> g_log_lats;
 long long g_start_time = 0;
 
 void SetupNeonTheme() {
@@ -105,6 +108,37 @@ void network_thread_func() {
     if (log_file.is_open()) log_file.close();
 }
 
+void LoadTrackFromJson(const std::string& filename, int step) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        g_status = "Error: Cannot open " + filename;
+        return;
+    }
+
+    g_log_lons.clear();
+    g_log_lats.clear();
+
+    std::string line;
+    int count = 0;
+
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+
+        try {
+            auto j = json::parse(line);
+            if (j.contains("location")) {
+                if (count % step == 0) {
+                    g_log_lats.push_back(j["location"]["lat"].get<double>());
+                    g_log_lons.push_back(j["location"]["lon"].get<double>());
+                }
+                count++;
+            }
+        } catch (...) {
+        }
+    }
+    g_status = "Loaded " + std::to_string(g_log_lons.size()) + " points from JSON";
+}
+
 void run_gui_loop(GLFWwindow* window) {
     float scale = 150000.0f;
 
@@ -116,7 +150,7 @@ void run_gui_loop(GLFWwindow* window) {
 
         // --- ОКНО УПРАВЛЕНИЯ ---
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(300, 350), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(300, 390), ImGuiCond_FirstUseEver);
         ImGui::Begin("Settings & Status");
         ImGui::TextColored(ImVec4(0, 1, 1, 1), "SYSTEM STATUS");
         ImGui::Separator();
@@ -156,11 +190,16 @@ void run_gui_loop(GLFWwindow* window) {
             g_time_data.clear();
             g_rsrp_data.clear();
         }
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        if (ImGui::Button("LOAD TRACK FROM JSON\n(Every 10th point)", ImVec2(-1, 40))) {
+            LoadTrackFromJson("gps_track_log.json", 10);
+        }
         ImGui::End();
 
-        // --- ОКНО КАРТЫ  ---
+        // --- ОКНО КАРТЫ (КАК БЫЛО) ---
         ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(950, 700), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_FirstUseEver);
         ImGui::Begin("Live Trajectory");
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
         ImVec2 win_pos = ImGui::GetCursorScreenPos();
@@ -190,13 +229,12 @@ void run_gui_loop(GLFWwindow* window) {
         }
         ImGui::End();
 
-        ImGui::SetNextWindowPos(ImVec2(10, 370), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(300, 340), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(10, 410), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
         ImGui::Begin("Signal Strength (LTE RSRP)");
 
         ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
         ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(0.0f, 0.02f, 0.0f, 1.0f));
-
         ImPlot::PushColormap("Hacker");
 
         if (ImPlot::BeginPlot("Cell Signal", ImVec2(-1, -1))) {
@@ -212,6 +250,22 @@ void run_gui_loop(GLFWwindow* window) {
         ImPlot::PopStyleColor(2);
         ImGui::End();
 
+        ImGui::SetNextWindowPos(ImVec2(320, 370), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(600, 340), ImGuiCond_FirstUseEver);
+        ImGui::Begin("JSON Saved Trajectory (Lat vs Lon)");
+
+        if (ImPlot::BeginPlot("Trajectory Plot", ImVec2(-1, -1))) {
+            ImPlot::SetupAxes("Longitude (X)", "Latitude (Y)", 0, 0);
+
+            if (!g_log_lats.empty() && !g_log_lons.empty()) {
+                ImPlot::PlotLine("Path", g_log_lons.data(), g_log_lats.data(), (int)g_log_lons.size());
+                ImPlot::PlotScatter("Points", g_log_lons.data(), g_log_lats.data(), (int)g_log_lons.size());
+            }
+
+            ImPlot::EndPlot();
+        }
+        ImGui::End();
+
         ImGui::Render();
         int dw, dh; glfwGetFramebufferSize(window, &dw, &dh);
         glViewport(0, 0, dw, dh);
@@ -220,7 +274,6 @@ void run_gui_loop(GLFWwindow* window) {
         glfwSwapBuffers(window);
     }
 }
-
 
 int main(int, char**) {
     if (!glfwInit()) return 1;
