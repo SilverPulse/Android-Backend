@@ -197,7 +197,7 @@ void run_gui_loop(GLFWwindow* window) {
         }
         ImGui::End();
 
-        // --- ОКНО КАРТЫ (КАК БЫЛО) ---
+        // --- ОКНО КАРТЫ ---
         ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_FirstUseEver);
         ImGui::Begin("Live Trajectory");
