@@ -255,11 +255,11 @@ void run_gui_loop(GLFWwindow* window) {
         ImGui::Begin("JSON Saved Trajectory (Lat vs Lon)");
 
         if (ImPlot::BeginPlot("Trajectory Plot", ImVec2(-1, -1))) {
-            ImPlot::SetupAxes("Longitude (X)", "Latitude (Y)", 0, 0);
+            ImPlot::SetupAxes("Latitude (X)", "Longitude (Y)", 0, 0);
 
             if (!g_log_lats.empty() && !g_log_lons.empty()) {
-                ImPlot::PlotLine("Path", g_log_lons.data(), g_log_lats.data(), (int)g_log_lons.size());
-                ImPlot::PlotScatter("Points", g_log_lons.data(), g_log_lats.data(), (int)g_log_lons.size());
+                ImPlot::PlotLine("Path", g_log_lats.data(), g_log_lons.data(), (int)g_log_lats.size());
+                ImPlot::PlotScatter("Points", g_log_lats.data(), g_log_lons.data(), (int)g_log_lats.size());
             }
 
             ImPlot::EndPlot();
