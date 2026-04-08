@@ -5,11 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(PostgreSQL REQUIRED)
 
 include_directories(external/imgui)
 include_directories(external/imgui/backends)
 include_directories(external/glfw/include)
 include_directories(external/implot)
+include_directories(${PostgreSQL_INCLUDE_DIRS})
 
 set(IMGUI_SOURCES
         external/imgui/imgui.cpp
@@ -37,4 +39,5 @@ target_link_libraries(MapApp
         zmq
         Threads::Threads
         dl
+        ${PostgreSQL_LIBRARIES}
 )
