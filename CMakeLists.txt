@@ -1,17 +1,25 @@
 cmake_minimum_required(VERSION 3.10)
 project(AndroidMapVisualizer)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(GLEW REQUIRED)
+find_package(CURL REQUIRED)
 
-include_directories(external/imgui)
-include_directories(external/imgui/backends)
-include_directories(external/glfw/include)
-include_directories(external/implot)
-include_directories(${PostgreSQL_INCLUDE_DIRS})
+include_directories(
+        external/imgui
+        external/imgui/backends
+        external/glfw/include
+        external/implot
+        /usr/include/stb
+        ${PostgreSQL_INCLUDE_DIRS}
+        ${GLEW_INCLUDE_DIRS}
+        ${CURL_INCLUDE_DIRS}
+        .
+)
 
 set(IMGUI_SOURCES
         external/imgui/imgui.cpp
@@ -29,15 +37,27 @@ set(IMPLOT_SOURCES
         external/implot/implot_demo.cpp
 )
 
-add_subdirectory(external/glfw)
+set(APP_SOURCES
+        Database.cpp
+        Network.cpp
+        Gui.cpp
+        TileManager.cpp
+        main.cpp
+)
 
-add_executable(MapApp main.cpp ${IMGUI_SOURCES} ${IMPLOT_SOURCES})
+add_subdirectory(external/glfw)
+add_executable(MapApp ${APP_SOURCES} ${IMGUI_SOURCES} ${IMPLOT_SOURCES})
 
 target_link_libraries(MapApp
         glfw
         ${OPENGL_LIBRARIES}
+        ${GLEW_LIBRARIES}
+        ${CURL_LIBRARIES}
+        ${PostgreSQL_LIBRARIES}
         zmq
         Threads::Threads
-        dl
-        ${PostgreSQL_LIBRARIES}
 )
+
+if(NOT WIN32)
+    target_link_libraries(MapApp dl)
+endif()
