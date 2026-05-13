@@ -2,6 +2,7 @@
 #include "AppState.h"
 #include "Database.h"
 #include "TileManager.h"
+#include "HeatmapManager.h"
 #include <GLFW/glfw3.h>
 
 class Gui {
@@ -20,4 +21,6 @@ private:
     float scale = 150000.0f;
 
     TileManager mapTiles;
+    HeatmapManager heatTiles;
+
 };

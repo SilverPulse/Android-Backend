@@ -140,7 +140,7 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
     }
 
     std::lock_guard<std::mutex> db_lock(db_mutex);
-    PGresult* res = PQexec(conn, "SELECT ts, lat, lon, lte_pci, lte_rsrp FROM full_telemetry ORDER BY ts ASC;");
+    PGresult* res = PQexec(conn, "SELECT ts, lat, lon, lte_pci, lte_rsrp, lte_rsrq, lte_rssi, alt FROM full_telemetry ORDER BY ts ASC;");
 
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         state.SetStatus("DB Select Error: " + std::string(PQerrorMessage(conn)));
@@ -154,13 +154,25 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
         double lat = atof(PQgetvalue(res, i, 1));
         double lon = atof(PQgetvalue(res, i, 2));
         int pci = atoi(PQgetvalue(res, i, 3));
-        int rsrp = atoi(PQgetvalue(res, i, 4));
+        double rsrp = PQgetisnull(res, i, 4) ? -140.0 : atof(PQgetvalue(res, i, 4));
+        double rsrq = PQgetisnull(res, i, 5) ? -30.0  : atof(PQgetvalue(res, i, 5));
+        double rssi = PQgetisnull(res, i, 6) ? -120.0 : atof(PQgetvalue(res, i, 6));
+        double alt  = PQgetisnull(res, i, 7) ? 0.0    : atof(PQgetvalue(res, i, 7));
 
         if (state.start_time == 0) state.start_time = ts;
         double time_sec = (ts - state.start_time) / 1000.0;
 
         std::lock_guard<std::mutex> lock(state.points_mutex);
-        state.points.push_back({(float)lat, (float)lon, 0.0f, ts});
+
+        GPSPoint newPoint;
+        newPoint.lat = lat;
+        newPoint.lon = lon;
+        newPoint.rsrp = rsrp;
+        newPoint.rsrq = rsrq;
+        newPoint.rssi = rssi;
+        newPoint.altitude = alt;
+        state.points.push_back(newPoint);
+
         state.log_lats.push_back(lat);
         state.log_lons.push_back(lon);
 

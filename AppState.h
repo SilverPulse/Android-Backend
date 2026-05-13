@@ -8,6 +8,10 @@
 struct GPSPoint {
     float lat, lon, alt;
     long long timestamp;
+    double rsrp = 0.0;
+    double rsrq = 0.0;
+    double rssi = 0.0;
+    double altitude = 0.0;
 };
 
 struct PciData {

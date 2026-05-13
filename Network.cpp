@@ -44,14 +44,27 @@ void Network::RunServer(AppState& state, Database& db) {
                 float alt = j["location"].value("alt", 0.0f);
                 long long time = j.value("timestamp", 0LL);
 
+                int pci = 0, rsrp = -140, rsrq = -30, rssi = -120;
+                if (j.contains("telephony") && j["telephony"].contains("lte")) {
+                    pci = j["telephony"]["lte"].value("pci", 0);
+                    rsrp = j["telephony"]["lte"].value("rsrp", -140);
+                    rsrq = j["telephony"]["lte"].value("rsrq", -30);
+                    rssi = j["telephony"]["lte"].value("rssi", -120);
+                }
+
                 {
                     std::lock_guard<std::mutex> lock(state.points_mutex);
-                    state.points.push_back({lat, lon, alt, time});
 
-                    if (j.contains("telephony") && j["telephony"].contains("lte")) {
-                        int pci = j["telephony"]["lte"].value("pci", 0);
-                        int rsrp = j["telephony"]["lte"].value("rsrp", 0);
+                    GPSPoint newPoint;
+                    newPoint.lat = lat;
+                    newPoint.lon = lon;
+                    newPoint.rsrp = (double)rsrp;
+                    newPoint.rsrq = (double)rsrq;
+                    newPoint.rssi = (double)rssi;
+                    newPoint.altitude = (double)alt;
+                    state.points.push_back(newPoint);
 
+                    if (pci != 0) {
                         if (state.start_time == 0) state.start_time = time;
                         double time_sec = (time - state.start_time) / 1000.0;
 

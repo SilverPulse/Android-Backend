@@ -42,6 +42,8 @@ set(APP_SOURCES
         Network.cpp
         Gui.cpp
         TileManager.cpp
+        HeatmapManager.cpp
+        stb_impl.cpp
         main.cpp
 )
 

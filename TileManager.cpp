@@ -1,5 +1,4 @@
 #include "TileManager.h"
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include <curl/curl.h>
 #include <filesystem>
@@ -121,13 +120,11 @@ void TileManager::SaveToDisk(const std::string& filepath, const std::vector<unsi
 }
 
 bool TileManager::LoadFromDisk(const std::string& filepath, std::vector<unsigned char>& buffer) {
-    // Флаг std::ios::ate (At The End) ставит "курсор" чтения в самый конец файла.
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return false;
-    //tellg выдаёт точный размер файла в байтах
     std::streamsize size = file.tellg();
 
-    file.seekg(0, std::ios::beg); // Возвращаем курсор в начало файла (std::ios::beg - beginning)
+    file.seekg(0, std::ios::beg);
     buffer.resize(size);
     if (file.read(reinterpret_cast<char*>(buffer.data()), size)) return true;
     return false;

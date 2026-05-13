@@ -136,33 +136,6 @@ void Gui::RenderUI(AppState& state, Database& db) {
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Live Trajectory");
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    ImVec2 win_pos = ImGui::GetCursorScreenPos();
-    ImVec2 win_size = ImGui::GetContentRegionAvail();
-    draw_list->AddRectFilled(win_pos, ImVec2(win_pos.x + win_size.x, win_pos.y + win_size.y), IM_COL32(5, 5, 15, 255));
-
-    lock.lock();
-    if (!state.points.empty()) {
-        float ref_lat = state.points[0].lat;
-        float ref_lon = state.points[0].lon;
-        ImVec2 center = { win_pos.x + win_size.x / 2, win_pos.y + win_size.y / 2 };
-        for (size_t i = 0; i < state.points.size(); i++) {
-            ImVec2 p_current = { center.x + (state.points[i].lon - ref_lon) * scale, center.y - (state.points[i].lat - ref_lat) * scale };
-            if (i > 0) {
-                ImVec2 p_prev = { center.x + (state.points[i-1].lon - ref_lon) * scale, center.y - (state.points[i-1].lat - ref_lat) * scale };
-                draw_list->AddLine(p_prev, p_current, IM_COL32(0, 255, 100, 200), 3.0f);
-            }
-            if (i == state.points.size() - 1) {
-                draw_list->AddCircleFilled(p_current, 10.0f, IM_COL32(255, 0, 80, 255));
-            }
-        }
-    }
-    lock.unlock();
-    ImGui::End();
-
     ImGui::SetNextWindowPos(ImVec2(10, 500), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 210), ImGuiCond_FirstUseEver);
     ImGui::Begin("Signal Strength (LTE RSRP)");
@@ -218,6 +191,14 @@ void Gui::RenderUI(AppState& state, Database& db) {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     ImGui::Begin("OpenStreetMap Live");
 
+    static int heatmap_criterion = 0;
+    const char* criteria_names[] = { "RSRP", "RSRQ", "RSSI", "Altitude" };
+
+    ImGui::SetNextItemWidth(150);
+    if (ImGui::Combo("Heatmap Metric", &heatmap_criterion, criteria_names, IM_ARRAYSIZE(criteria_names))) {
+        heatTiles.ClearCache();
+    }
+
     double targetLat = 55.0131;
     double targetLon = 82.9506;
 
@@ -231,44 +212,41 @@ void Gui::RenderUI(AppState& state, Database& db) {
 
     static const ImPlotAxisFlags axFlags = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
 
-    if (ImPlot::BeginPlot("##MapPlot", ImVec2(-1, -1), ImPlotFlags_Equal)) {
+    if (ImPlot::BeginPlot("##MapPlot", ImVec2(-1, -1), ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
         ImPlot::SetupAxes("X", "Y", axFlags, axFlags | ImPlotAxisFlags_Invert);
 
         ImPlotRect lims = ImPlot::GetPlotLimits();
-
         double viewWidth = lims.X.Max - lims.X.Min;
 
-        int currentZoom = 0;
-        if (viewWidth > 0) {
-            currentZoom = (int)std::floor(-std::log2(viewWidth));
-
-            currentZoom += 1;
-        }
-
-        currentZoom = std::max(0, std::min(currentZoom, 18));
-
+        int currentZoom = (viewWidth > 0) ? std::max(0, std::min((int)std::floor(-std::log2(viewWidth)) + 1, 18)) : 0;
         double tilesCount = (double)(1 << currentZoom);
 
         int minTileX = std::max(0, (int)std::floor(lims.X.Min * tilesCount));
         int maxTileX = std::min((1 << currentZoom) - 1, (int)std::floor(lims.X.Max * tilesCount));
-
         int minTileY = std::max(0, (int)std::floor(lims.Y.Min * tilesCount));
         int maxTileY = std::min((1 << currentZoom) - 1, (int)std::floor(lims.Y.Max * tilesCount));
 
         if ((maxTileX - minTileX + 1) * (maxTileY - minTileY + 1) < 256) {
             for (int x = minTileX; x <= maxTileX; ++x) {
                 for (int y = minTileY; y <= maxTileY; ++y) {
+
+                    ImGui::PushID(x * 100000 + y);
+
+                    ImVec2 bmin{ (float)(x / tilesCount), (float)(y / tilesCount) };
+                    ImVec2 bmax{ (float)((x + 1) / tilesCount), (float)((y + 1) / tilesCount) };
+                    ImVec2 uv0{0, 1}; ImVec2 uv1{1, 0};
+
                     GLuint tex_id = mapTiles.GetTileTexture(currentZoom, x, y);
-
                     if (tex_id != 0) {
-                        ImVec2 bmin{ (float)(x / tilesCount), (float)(y / tilesCount) };
-                        ImVec2 bmax{ (float)((x + 1) / tilesCount), (float)((y + 1) / tilesCount) };
-
-                        ImVec2 uv0{0, 1};
-                        ImVec2 uv1{1, 0};
-
-                        ImPlot::PlotImage("##tile", (void*)(intptr_t)tex_id, bmin, bmax, uv0, uv1);
+                        ImPlot::PlotImage("OSM", (void*)(intptr_t)tex_id, bmin, bmax, uv0, uv1);
                     }
+
+                    GLuint heat_tex = heatTiles.GetHeatmapTile(currentZoom, x, y, heatmap_criterion, state);
+                    if (heat_tex != 0) {
+                        ImPlot::PlotImage("Heatmap", (void*)(intptr_t)heat_tex, bmin, bmax, uv0, uv1);
+                    }
+
+                    ImGui::PopID();
                 }
             }
         } else {
@@ -277,5 +255,44 @@ void Gui::RenderUI(AppState& state, Database& db) {
 
         ImPlot::EndPlot();
     }
+
+    ImGui::SetCursorPos(ImVec2(15, 60));
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0f);
+
+    if (ImGui::BeginChild("SignalLegend", ImVec2(220, 85), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs)) {
+        const char* title = "";
+        const char* minL = ""; const char* midL = ""; const char* maxL = "";
+
+        if (heatmap_criterion == 0)      { title = "RSRP (dBm)";   minL = "-120"; midL = "-95"; maxL = "-70"; }
+        else if (heatmap_criterion == 1) { title = "RSRQ (dB)";    minL = "-20";  midL = "-15"; maxL = "-9";  }
+        else if (heatmap_criterion == 2) { title = "RSSI (dBm)";   minL = "-110"; midL = "-92"; maxL = "-75"; }
+        else if (heatmap_criterion == 3) { title = "Altitude (m)"; minL = "50";   midL = "155"; maxL = "260"; }
+
+        ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", title);
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0, 3));
+
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float width = 190.0f;
+        float height = 15.0f;
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+        draw_list->AddRectFilledMultiColor(ImVec2(p.x, p.y), ImVec2(p.x + width*0.25f, p.y + height), IM_COL32(0,0,255,255), IM_COL32(0,255,255,255), IM_COL32(0,255,255,255), IM_COL32(0,0,255,255));
+        draw_list->AddRectFilledMultiColor(ImVec2(p.x + width*0.25f, p.y), ImVec2(p.x + width*0.5f, p.y + height), IM_COL32(0,255,255,255), IM_COL32(0,255,0,255), IM_COL32(0,255,0,255), IM_COL32(0,255,255,255));
+        draw_list->AddRectFilledMultiColor(ImVec2(p.x + width*0.5f, p.y), ImVec2(p.x + width*0.75f, p.y + height), IM_COL32(0,255,0,255), IM_COL32(255,255,0,255), IM_COL32(255,255,0,255), IM_COL32(0,255,0,255));
+        draw_list->AddRectFilledMultiColor(ImVec2(p.x + width*0.75f, p.y), ImVec2(p.x + width, p.y + height), IM_COL32(255,255,0,255), IM_COL32(255,0,0,255), IM_COL32(255,0,0,255), IM_COL32(255,255,0,255));
+
+        ImGui::Dummy(ImVec2(width, height + 2));
+
+        ImGui::Text("%s", minL);
+        ImGui::SameLine(width / 2 - ImGui::CalcTextSize(midL).x / 2); ImGui::Text("%s", midL);
+        ImGui::SameLine(width - ImGui::CalcTextSize(maxL).x + 5);     ImGui::Text("%s", maxL);
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
     ImGui::End();
 }
