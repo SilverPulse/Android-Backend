@@ -137,6 +137,9 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
         state.log_lats.clear();
         state.log_lons.clear();
         state.start_time = 0;
+        state.all_available_pcis.clear();
+        state.selected_pcis.clear();
+        state.top_pci = -1;
     }
 
     std::lock_guard<std::mutex> db_lock(db_mutex);
@@ -149,6 +152,7 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
     }
 
     int rows = PQntuples(res);
+    std::map<int, int> pci_counts;
     for (int i = 0; i < rows; i += step) {
         long long ts = atoll(PQgetvalue(res, i, 0));
         double lat = atof(PQgetvalue(res, i, 1));
@@ -171,12 +175,15 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
         newPoint.rsrq = rsrq;
         newPoint.rssi = rssi;
         newPoint.altitude = alt;
+        newPoint.pci = pci;
         state.points.push_back(newPoint);
 
         state.log_lats.push_back(lat);
         state.log_lons.push_back(lon);
 
         if (pci != 0) {
+            state.all_available_pcis.insert(pci);
+            pci_counts[pci]++;
             state.pci_data[pci].time_data.push_back(time_sec);
             state.pci_data[pci].rsrp_data.push_back((double)rsrp);
             state.pci_history_time.push_back(time_sec);
@@ -185,6 +192,24 @@ void Database::LoadTrackFromDB(int step, AppState& state) {
             state.current_rsrp = (double)rsrp;
         }
     }
+
+
+    if (!pci_counts.empty()) {
+        int top_pci = -1;
+        int max_count = -1;
+        for (auto const& [p, count] : pci_counts) {
+            if (count > max_count) {
+                max_count = count;
+                top_pci = p;
+            }
+        }
+        if (top_pci != -1) {
+            std::lock_guard<std::mutex> lock(state.points_mutex);
+            state.top_pci = top_pci;
+            state.selected_pcis.insert(top_pci);
+        }
+    }
+
     PQclear(res);
     state.SetStatus("Loaded " + std::to_string(rows) + " points with Telemetry from DB!");
 }

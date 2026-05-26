@@ -18,7 +18,7 @@ public:
     void ClearCache();
 
 private:
-    using TileKey = std::tuple<int, int, int, int>;
+    using TileKey = std::tuple<int, int, int, int, std::string>;
 
     std::map<TileKey, GLuint> _textures;
     std::queue<TileKey> _textureQueue;
@@ -32,7 +32,7 @@ private:
 
     std::map<TileKey, std::future<HeatmapImage>> _pendingTasks;
 
-    static HeatmapImage GenerateTileAsync(int z, int x, int y, int type, std::vector<GPSPoint> points);
+    static HeatmapImage GenerateTileAsync(int z, int x, int y, int type, std::string pci_mode, std::vector<GPSPoint> points);
     static double GetDistanceMeters(double lat1, double lon1, double lat2, double lon2);
     static void GetColorForValue(double value, int type, unsigned char& r, unsigned char& g, unsigned char& b, unsigned char& a);
 

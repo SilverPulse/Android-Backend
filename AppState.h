@@ -4,6 +4,7 @@
 #include <mutex>
 #include <map>
 #include <atomic>
+#include <set>
 
 struct GPSPoint {
     float lat, lon, alt;
@@ -12,6 +13,7 @@ struct GPSPoint {
     double rsrq = 0.0;
     double rssi = 0.0;
     double altitude = 0.0;
+    int pci = 0;
 };
 
 struct PciData {
@@ -38,6 +40,10 @@ struct AppState {
     std::vector<double> log_lons;
     std::vector<double> log_lats;
     long long start_time = 0;
+
+    std::set<int> all_available_pcis;
+    std::set<int> selected_pcis;
+    int top_pci = -1;
 
     void SetStatus(const std::string& new_status) {
         std::lock_guard<std::mutex> lock(status_mutex);

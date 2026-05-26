@@ -73,7 +73,8 @@ void Gui::RunLoop(AppState& state, Database& db) {
 
 void Gui::RenderUI(AppState& state, Database& db) {
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 480), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 700), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 700), ImGuiCond_FirstUseEver);
     ImGui::Begin("Settings & Status");
 
     ImGui::TextColored(ImVec4(0, 1, 1, 1), "SYSTEM STATUS");
@@ -134,6 +135,26 @@ void Gui::RenderUI(AppState& state, Database& db) {
     if (ImGui::Button("IMPORT JSON TO DATABASE", ImVec2(-1, 40))) {
         std::thread([&]() { db.ImportJsonToDB("gps_track_log.json", state); }).detach();
     }
+
+    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+    ImGui::TextColored(ImVec4(1, 0.8f, 0, 1), "PCI DISPLAY MODE");
+    ImGui::Separator();
+
+    bool is_all_selected = (!state.all_available_pcis.empty() && state.selected_pcis.size() == state.all_available_pcis.size());
+    const char* btn_text = is_all_selected ? "SHOW ONLY BEST PCI" : "SHOW ALL PCI";
+
+    if (ImGui::Button(btn_text, ImVec2(-1, 40))) {
+        std::lock_guard<std::mutex> lock(state.points_mutex);
+        state.selected_pcis.clear();
+
+        if (is_all_selected) {
+            if (state.top_pci != -1) state.selected_pcis.insert(state.top_pci);
+        } else {
+            state.selected_pcis = state.all_available_pcis;
+        }
+        heatTiles.ClearCache();
+    }
+
     ImGui::End();
 
     ImGui::SetNextWindowPos(ImVec2(10, 500), ImGuiCond_FirstUseEver);
@@ -212,6 +233,9 @@ void Gui::RenderUI(AppState& state, Database& db) {
 
     static const ImPlotAxisFlags axFlags = ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
 
+    ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+
     if (ImPlot::BeginPlot("##MapPlot", ImVec2(-1, -1), ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
         ImPlot::SetupAxes("X", "Y", axFlags, axFlags | ImPlotAxisFlags_Invert);
 
@@ -255,6 +279,8 @@ void Gui::RenderUI(AppState& state, Database& db) {
 
         ImPlot::EndPlot();
     }
+
+    ImPlot::PopStyleColor(2);
 
     ImGui::SetCursorPos(ImVec2(15, 60));
 
